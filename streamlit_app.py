@@ -1,38 +1,96 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
+from lists import location_options, comp_dir_options
+import pandas as pd
+import numpy as np
+import pickle
+import classifire
+import datacleaning
+import prediction
 
-"""
-# Welcome to Streamlit!
-
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+st.write("""
+# How's the weather?
+Will it rain tomorrow?
+""")
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+def location_format_func(option):
+    return location_options[option]
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+def dir_format_func(option):
+    return comp_dir_options[option]
 
-    points_per_turn = total_points / num_turns
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+st.balloons()
+form = st.form(key='my_form')
+date = form.date_input(label='Date')
+location = form.selectbox("Location", options=list(location_options.keys()), format_func=location_format_func)
+min_temp = form.number_input(label='Min Temp')
+max_temp = form.number_input(label='Max Temp')
+rainfall = form.number_input(label='Rainfall')
+evaporation = form.number_input(label='Evaporation')
+sunshine = form.number_input(label='Sunshine')
+wind_gust_dir = form.selectbox("WindGustDir", options=list(comp_dir_options.keys()), format_func=dir_format_func)
+wind_gust_speed = form.number_input(label='WindGustSpeed')
+wind_dir_9am = form.selectbox("WindDir9am", options=list(comp_dir_options.keys()), format_func=dir_format_func)
+wind_dir_3pm = form.selectbox("WindDir3pm", options=list(comp_dir_options.keys()), format_func=dir_format_func)
+wind_speed_9am = form.number_input(label='WindSpeed9am')
+wind_speed_3pm = form.number_input(label='WindSpeed3pm')
+humidity_9am = form.number_input(label='Humidity9am')
+humidity_3pm = form.number_input(label='Humidity3pm')
+pressure_9am = form.number_input(label='Pressure9am')
+pressure_3pm = form.number_input(label='Pressure3pm')
+cloud_9am = form.number_input(label='Cloud9am')
+cloud_3pm = form.number_input(label='Cloud3pm')
+temp_9am = form.number_input(label='Temp9am')
+temp_3pm = form.number_input(label='Temp3pm')
+submit_form = form.form_submit_button(label='Submit')
+
+if (submit_form):
+    if rainfall > 0:
+        rt = 'Yes'
+    else:
+        rt = 'No'
+
+    lookup_table = pd.read_csv("data/AvgModLookup.csv")
+
+    df_to_predict = pd.DataFrame({"Date":[str(date)],
+                               "Location": [str(location_options[location])],
+                               "MinTemp":[min_temp],
+                               "MaxTemp":[max_temp],
+                               "Rainfall":[rainfall],
+                               "Evaporation":[evaporation],
+                               "Sunshine":[sunshine],
+                               "WindGustDir":[str(comp_dir_options[wind_gust_dir])],
+                               "WindGustSpeed":[wind_gust_speed],
+                               "WindDir9am":[str(comp_dir_options[wind_dir_9am])],
+                               "WindDir3pm":[str(comp_dir_options[wind_dir_3pm])],
+                               "WindSpeed9am":[wind_speed_9am],
+                               "WindSpeed3pm":[wind_speed_3pm],
+                               "Humidity9am":[humidity_9am],
+                               "Humidity3pm":[humidity_3pm],
+                               "Pressure9am":[pressure_9am],
+                               "Pressure3pm":[pressure_3pm],
+                               "Cloud9am":[cloud_9am],
+                               "Cloud3pm":[cloud_3pm],
+                               "Temp9am":[temp_9am],
+                               "Temp3pm":[temp_3pm],
+                               "RainToday":[rt]})
+
+    df_to_predict_month = datacleaning.add_month_column(df_to_predict)
+    df_to_predict_clean = datacleaning.clean_data_frame(dirty=df_to_predict_month, lookup=lookup_table)
+
+    df_to_predict = prediction.reduce_data(df_to_predict_clean)
+    df_to_predict = prediction.convert(df_to_predict)
+
+    prediction = prediction.predict(df_to_predict)
+    df_to_predict["predicion"] = prediction
+
+
+
+
+    if (prediction == 'Yes'):
+        st.write('It will rain in ' + location_format_func(location))
+        st.write('Better take an umbrella with you!')
+    else:
+        st.write('Predicting no rain tomorrow! Sun will shine in ' + location_format_func(location))
